@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "9.9.9",
+  "name": 42,
+  "revision": -1,
+  "pages": [
+    {
+      "id": "page-a",
+      "name": 123,
+      "root": {
+        "id": "invalid-root",
+        "type": "fragment",
+        "children": [
+          {
+            "type": "element"
+          },
+          {
+            "id": "dup",
+            "type": "component"
+          },
+          {
+            "id": "dup",
+            "type": "text",
+            "props": {}
+          },
+          {
+            "id": "text-with-children",
+            "type": "text",
+            "props": {
+              "text": "hello"
+            },
+            "children": []
+          },
+          {
+            "id": "fragment-with-tag",
+            "type": "fragment",
+            "tag": "div",
+            "component": "Card"
+          },
+          {
+            "id": "unknown-type",
+            "type": "unknown"
+          },
+          {
+            "id": "unknown-style",
+            "type": "element",
+            "tag": "div",
+            "style": {
+              "unknownKey": 1
+            }
+          },
+          {
+            "id": "bad-bindings-events",
+            "type": "element",
+            "tag": "div",
+            "bindings": {
+              "value": {}
+            },
+            "events": {
+              "click": {}
+            }
+          },
+          {
+            "id": "bad-key",
+            "type": "element",
+            "tag": "div",
+            "key": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-a",
+      "name": "duplicate page",
+      "root": {
+        "id": "root-2",
+        "type": "fragment",
+        "children": []
+      }
+    }
+  ]
+}

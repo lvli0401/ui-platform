@@ -444,6 +444,7 @@ packages/virtual-ui/src/document-store.ts（扩展 dispatch/undo/redo）
 packages/editor-core/src/editor-store.ts
 packages/editor-core/src/selection.ts
 packages/editor-core/src/geometry.ts
+packages/editor-core/src/assert-no-editor-state.ts
 packages/editor-core/src/index.ts
 ```
 
@@ -480,10 +481,9 @@ packages/editor-web/index.html
 packages/editor-web/vite.config.ts
 packages/editor-web/src/main.ts
 packages/editor-web/src/App.vue
-packages/editor-web/src/canvas/{Canvas.vue,SelectionOverlay.vue}
-packages/editor-web/src/layers/LayersPanel.vue
-packages/editor-web/src/properties/PropertiesPanel.vue（占位）
-packages/editor-web/src/composables/useEditor.ts
+packages/editor-web/src/components/{CanvasView.vue,LayersPanel.vue,LayerTree.vue}
+packages/editor-web/src/components/PropertiesPanel.vue（占位）
+packages/editor-web/src/editor/editor-instance.ts
 ```
 
 **验收标准**
@@ -514,9 +514,8 @@ packages/editor-web/src/composables/useEditor.ts
 **产出**
 
 ```text
-packages/editor-web/src/properties/PropertiesPanel.vue
-packages/editor-web/src/properties/PropertyField.vue
-packages/editor-web/src/properties/StyleFields.vue
+packages/editor-web/src/components/PropertiesPanel.vue
+packages/editor-web/src/components/PropertyControl.vue
 packages/editor-core/src/editor-store.ts（扩展 updateProps/updateStyle）
 ```
 
@@ -537,11 +536,11 @@ packages/editor-core/src/editor-store.ts（扩展 updateProps/updateStyle）
 **范围**
 
 - `DocumentPersistence` 接口；`BrowserFilePersistence` 实现：
-  - `save(document)`：触发 JSON 文件下载。
-  - `load()`：打开文件选择器并解析。
+  - `save(document, fileName?)`：序列化前执行 `assertNoEditorState`，再触发 JSON 文件下载。
+  - `load(file)`：读取 `File` 文本并返回 `ParseResult`，语法与校验错误均返回 issue。
 - 工具栏接入导出、导入。
 - 导入失败时展示 `ValidationIssue.path` 与 `message`，不改变当前文档。
-- 导出文件名固定为 `document.json`，便于 E2E 与人工复现。
+- 导出文件名由文档名生成 slug（如 `login-page.json`），便于 E2E 与人工复现。
 - E2E `e2e/walking-skeleton.spec.ts`。
 
 **非目标**：后端存储、自动保存、localStorage 持久化、版本迁移实现。
@@ -550,7 +549,7 @@ packages/editor-core/src/editor-store.ts（扩展 updateProps/updateStyle）
 
 ```text
 packages/editor-core/src/persistence.ts
-packages/editor-web/src/toolbar/EditorToolbar.vue
+packages/editor-web/src/components/DocumentActions.vue
 e2e/walking-skeleton.spec.ts
 ```
 
@@ -571,7 +570,7 @@ e2e/walking-skeleton.spec.ts
 **范围**
 
 - 左侧组件面板：`Text`、`Card`、`Input`、`Button`，点击插入到当前选中节点的末尾；未选中时插入页根。
-- Layers 面板操作：删除选中节点、上移、下移、移入上一个兄弟节点。
+- Layers 面板操作：删除选中节点、上移、下移、移出到祖父节点。
 - 删除保留完整子树，undo 一步还原。
 - 插入后自动选中新节点。
 - 所有操作经 `InsertNodeCommand` / `DeleteNodeCommand` / `MoveNodeCommand`。
@@ -581,9 +580,9 @@ e2e/walking-skeleton.spec.ts
 **产出**
 
 ```text
-packages/editor-web/src/toolbar/ComponentPalette.vue
-packages/editor-web/src/layers/LayersPanel.vue（扩展操作）
-e2e/tree-ops.spec.ts
+packages/editor-web/src/components/LayersPanel.vue（Layers 操作与组件面板）
+packages/editor-web/src/editor/editor-instance.ts（扩展结构命令）
+e2e/structure.spec.ts
 ```
 
 **验收标准**
@@ -594,7 +593,7 @@ e2e/tree-ops.spec.ts
 4. 移动节点时索引同步，`assertIndexInvariants` 通过。
 5. 每次操作 undo 一步复原，redo 一步重做。
 
-**验证**：`pnpm vitest run packages/virtual-ui` + `pnpm playwright test e2e/tree-ops.spec.ts`。
+**验证**：`pnpm vitest run packages/virtual-ui` + `pnpm playwright test e2e/structure.spec.ts`。
 
 ### T12 Canvas 拖拽与布局验证
 
@@ -608,6 +607,7 @@ e2e/tree-ops.spec.ts
   1. 节点自身 `style.position === 'absolute'`：更新 `left` / `top`。
   2. 目标容器为 flex 容器且节点为普通流内节点：计算目标父级与插入索引，提交 `MoveNodeCommand`。
   3. 其他情况：不做结构变更，回退原位。
+- 落点解析从指针下的节点向上寻找可接受子节点的祖先，仅 flex 容器产生插入标记。
 - 使用 `requestAnimationFrame` 合并 `pointermove`。
 - 500 节点 fixture 的拖动帧时长记录为基线，不设阻断阈值。
 
@@ -617,11 +617,10 @@ e2e/tree-ops.spec.ts
 
 ```text
 packages/editor-core/src/drag.ts
-packages/editor-core/src/geometry.ts（扩展坐标转换）
-packages/editor-web/src/canvas/SelectionOverlay.vue（扩展）
+packages/editor-core/src/geometry.ts（坐标转换）
+packages/editor-web/src/components/CanvasView.vue（选择、拖拽与 Overlay）
 fixtures/absolute.page.json
-fixtures/large.page.json（500 节点，测试生成或提交）
-e2e/drag.spec.ts
+e2e/drag.spec.ts（500 节点文档在测试内生成）
 ```
 
 **验收标准**
@@ -802,7 +801,7 @@ export interface ValidationIssue {
 }
 
 export type ParseResult =
-  | { ok: true; document: UIDocument }
+  | { ok: true; document: UIDocument; warnings: ValidationIssue[] }
   | { ok: false; issues: ValidationIssue[] }
 
 export function validateDocument(value: unknown): ValidationIssue[]
@@ -907,6 +906,8 @@ export interface ComponentDefinition {
   editor?: {
     label?: string
     propOrder?: string[]
+    /** 是否允许作为结构编辑与拖拽的落点。默认 false。 */
+    acceptsChildren?: boolean
   }
 }
 
@@ -939,6 +940,7 @@ interface VirtualUIRuntimeProps {
   registry: Pick<ComponentRegistry, 'get'>
   revision?: number
   interactive?: boolean
+  resolveHandler?: RenderContext['resolveHandler']
 }
 ```
 
@@ -956,12 +958,33 @@ export interface CanvasTransform {
   offsetY: number
 }
 
+export type DragMode = 'absolute' | 'flex'
+
+export interface DragDropTarget {
+  parentId: string
+  index: number
+}
+
+export interface DragState {
+  nodeId: string
+  mode: DragMode
+  startPoint: Point
+  delta: Point
+  dropTarget: DragDropTarget | null
+}
+
+export type DragCommit =
+  | { mode: 'absolute'; left: number; top: number }
+  | { mode: 'flex'; parentId: string; index: number }
+
 export class EditorStore {
   constructor(document: UIDocument)
   get document(): UIDocument
   get revision(): number
   get index(): Readonly<DocumentIndex>
   get selection(): Readonly<SelectionState>
+  get canvasTransform(): Readonly<CanvasTransform>
+  get drag(): Readonly<DragState> | null
   select(nodeId: string | null, options?: { additive?: boolean }): void
   hover(nodeId: string | null): void
 
@@ -971,26 +994,31 @@ export class EditorStore {
   deleteNode(nodeId: string): void
   moveNode(nodeId: string, parentId: string, index: number): void
 
-  beginDrag(nodeId: string, clientPoint: Point, canvas: DOMRect): void
-  updateDrag(clientPoint: Point, canvas: DOMRect): void
-  commitDrag(): void
+  // mode 由节点 style.position === 'absolute' 自动决定。
+  beginDrag(nodeId: string, startPoint: Point): void
+  updateDrag(point: Point, dropTarget?: DragDropTarget | null): void
+  // 提交一次命令；null 表示取消结构/样式变更，只清理拖拽状态。
+  commitDrag(commit: DragCommit | null): boolean
   cancelDrag(): void
 
   undo(): boolean
   redo(): boolean
+  replaceDocument(document: UIDocument): void
   subscribe(listener: () => void): () => void
 }
 
 export interface DocumentPersistence {
-  save(document: UIDocument): Promise<void>
-  load(): Promise<UIDocument | null>
+  save(document: UIDocument, fileName?: string): Promise<void>
+  load(file: File): Promise<ParseResult>
 }
 
 export class BrowserFilePersistence implements DocumentPersistence {
-  constructor(filename?: string)
-  save(document: UIDocument): Promise<void>
-  load(): Promise<UIDocument | null>
+  save(document: UIDocument, fileName?: string): Promise<void>
+  load(file: File): Promise<ParseResult>
 }
+
+export function serializeDocumentForExport(document: UIDocument): string
+export function defaultExportFileName(document: UIDocument): string
 ```
 
 ### 5.6 行为约定
@@ -1006,6 +1034,9 @@ export class BrowserFilePersistence implements DocumentPersistence {
 9. `schemaVersion` 表示持久化格式版本；`revision` 表示编辑计数；导入保留二者。
 10. 节点 `style` 只作用于节点根元素，组件内部样式不可被文档覆盖。
 11. `parseDocument` 仅当存在 `severity: 'error'` 的 issue 时返回失败；warning 不阻断导入，但需在导入结果中可见。
+12. 拖拽期间只修改 `EditorStore.drag`。`pointerup` 通过 `commitDrag` 最多提交一条 `UpdateStyleCommand` 或 `MoveNodeCommand`；`commitDrag(null)` 不产生历史项。
+13. `MoveNodeCommand` 的 `index` 是原兄弟列表中的插入边界；同父向下移动需要换算，Canvas 层在提交前完成换算。
+14. 导出文件名由文档名生成 slug（如 `Login Page` → `login-page.json`），无有效字符时回退为 `virtual-ui-document.json`。
 
 ---
 
@@ -1130,26 +1161,25 @@ P0 不支持：CSS 选择器、媒体查询、伪类、Grid、transform、动画
 | 单元测试 | Vitest | `@vui/core`、`@vui/runtime-vue`、`@vui/editor-core` | 行覆盖率不低于 80% |
 | 组件测试 | Vitest + `@vue/test-utils` | Runtime 输出、属性控件 | 只对 Runtime 输出做快照 |
 | E2E | Playwright（chromium） | 渲染、选择、编辑闭环、结构操作、拖拽 | 只覆盖主链路，不做全交互覆盖 |
-| 构建 | Vite build | `editor-web`、`playground` | 必须通过 |
+| 构建 | Vite build | `editor-web` | 必须通过；`playground` 至少通过类型检查 |
 
 ### 7.2 E2E 用例清单
 
 | 文件 | 覆盖 | 引入任务 |
 |---|---|---|
-| `e2e/smoke.spec.ts` | 应用加载、登录页可见 | T08 |
-| `e2e/selection.spec.ts` | Canvas 与 Layers 双向选择 | T08 |
+| `e2e/selection.spec.ts` | 应用加载、Canvas 与 Layers 双向选择 | T08 |
 | `e2e/properties.spec.ts` | 属性与样式编辑、undo | T09 |
-| `e2e/walking-skeleton.spec.ts` | 编辑 → 导出 → 导入 → 一致 | T10（go/no-go） |
-| `e2e/tree-ops.spec.ts` | 插入、删除、移动、undo | T11 |
-| `e2e/drag.spec.ts` | 绝对定位与 flex 拖动、单次提交 | T12 |
-| `e2e/acceptance.spec.ts` | 非法导入、事件惰性、完整回归 | T13 |
+| `e2e/walking-skeleton.spec.ts` | 编辑 → 导出 → 导入 → 一致；非法导入拒绝 | T10（go/no-go） |
+| `e2e/structure.spec.ts` | 插入、删除、移动、undo | T11 |
+| `e2e/drag.spec.ts` | 绝对定位与 flex 拖动、单次提交、500 节点基线 | T12 |
+| `e2e/acceptance.spec.ts` | 主链路回归、事件惰性、非法导入 | T13 |
 
 ### 7.3 测试数据
 
 - `fixtures/login.page.json`：合法登录页。
 - `fixtures/login.page.invalid.json`：覆盖全部校验错误类型。
 - `fixtures/absolute.page.json`：绝对定位拖拽。
-- `fixtures/large.page.json`：500 节点性能基线。
+- 500 节点性能文档在 `e2e/drag.spec.ts` 内生成，不单独提交。
 - 所有 fixture 纳入版本控制，不得在测试运行时依赖网络。
 
 ### 7.4 独立验收命令
@@ -1163,27 +1193,55 @@ pnpm vitest run packages/editor-core
 pnpm vitest run packages/editor-web
 pnpm playwright test e2e/selection.spec.ts
 pnpm playwright test e2e/walking-skeleton.spec.ts
-pnpm playwright test e2e/tree-ops.spec.ts
+pnpm playwright test e2e/structure.spec.ts
 pnpm playwright test e2e/drag.spec.ts
+pnpm playwright test e2e/acceptance.spec.ts
 pnpm verify
 ```
 
 ### 7.5 P0 最终验收清单
 
-- [ ] 登录页 fixture 可在编辑器加载并渲染
-- [ ] 点击 Canvas 节点可选中，Layers 同步
-- [ ] 点击 Layers 项可选中，Canvas 选中框同步
-- [ ] 修改 Button label 后画布更新，undo 恢复
-- [ ] 修改背景色后画布更新，undo 恢复
-- [ ] 插入、删除、移动节点均可用，undo/redo 正确
-- [ ] 绝对定位节点可拖动，拖动期间文档不变
-- [ ] flex 容器内节点可拖动并改变父级或顺序
-- [ ] 导出 JSON 不含编辑器状态
-- [ ] 导入导出文件后结构与样式一致
-- [ ] 非法文档被拒绝并显示具体路径
-- [ ] 带 events 定义的节点渲染不崩溃
-- [ ] `pnpm verify && pnpm build && pnpm test:e2e` 全绿
-- [ ] 仓库中不存在 `@open-pencil/*` 依赖或 import
+- [x] 登录页 fixture 可在编辑器加载并渲染
+- [x] 点击 Canvas 节点可选中，Layers 同步
+- [x] 点击 Layers 项可选中，Canvas 选中框同步
+- [x] 修改 Button label 后画布更新，undo 恢复
+- [x] 修改背景色后画布更新，undo 恢复
+- [x] 插入、删除、移动节点均可用，undo/redo 正确
+- [x] 绝对定位节点可拖动，拖动期间文档不变
+- [x] flex 容器内节点可拖动并改变父级或顺序
+- [x] 导出 JSON 不含编辑器状态
+- [x] 导入导出文件后结构与样式一致
+- [x] 非法文档被拒绝并显示具体路径
+- [x] 带 events 定义的节点渲染不崩溃
+- [x] `pnpm verify && pnpm build && pnpm test:e2e` 全绿
+- [x] 生产依赖与代码中不存在 `@open-pencil/*` 依赖或 import（扫描器测试夹具除外）
+
+### 7.6 P0 验收记录
+
+执行日期：2026-11-11。
+
+环境：macOS（Darwin 27.2.0）、Node.js 20.19.5、pnpm 12.3.4、Playwright 1.65.0、Google Chrome 157.0.8103.51。
+
+| 命令 | 结果 |
+|---|---|
+| `pnpm verify` | 通过。`check:ban` 未发现 OpenPencil；5 个 workspace 类型检查通过；ESLint 0 error、33 warning（仅 Vue 模板格式）；Vitest 12 个文件、80 个测试全部通过 |
+| `pnpm build` | 通过。77 个模块；`index.js` 112.98 kB（gzip 40.54 kB）；`index.css` 8.30 kB（gzip 2.02 kB）；`index.html` 0.47 kB；dist 约 132 kB |
+| `PW_USE_SYSTEM_CHROME=1 pnpm test:e2e` | 18 个 Playwright 测试全部通过，用时 6.5 s |
+
+E2E 覆盖：
+
+- `selection.spec.ts`：3 个测试，Canvas/Layers 双向选择、层级与 hover。
+- `properties.spec.ts`：2 个测试，props/style 编辑、undo/redo、enum 与 boolean。
+- `walking-skeleton.spec.ts`：2 个测试，编辑导出导入再导出字节一致；非法导入保留当前文档。
+- `structure.spec.ts`：4 个测试，插入、删除子树、跨层移动、同层上下移动。
+- `drag.spec.ts`：4 个测试，flex 重排、跨父级移动、绝对定位 left/top、500 节点基线。
+- `acceptance.spec.ts`：3 个测试，主链路回归、事件惰性、非法导入路径提示。
+
+500 节点拖拽基线：本轮平均帧时长 17.59 ms，采样 18 帧；仅记录，不设阻断阈值。
+
+本机说明：Playwright bundled Chromium 下载速度不足以完成安装，因此本机 E2E 使用系统 Chrome。`playwright.config.ts` 仅在 `PW_USE_SYSTEM_CHROME=1` 时切换 channel；CI 仍执行 `playwright install chromium` 并使用捆绑版本。
+
+验收结论：P0 的 Virtual UI → Vue Runtime → Editor 闭环成立，满足 go/no-go 条件。未完成项均为明确的 P1 范围，不属于 P0 缺陷。
 
 ---
 

@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`VirtualUIRuntime > renders the login page and marks every node 1`] = `
+"<div data-node-id="login-root" style="display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f3f4f6;">
+  <section data-v-6ad025d2="" class="vui-card" data-node-id="login-card" style="display: flex; flex-direction: column; width: 360px; gap: 16px; padding: 32px; background-color: #ffffff; border-radius: 12px;">
+    <h1 data-node-id="login-title" style="font-size: 24px; font-weight: 600; color: #111827;">Sign in</h1><input data-v-e85a6f55="" class="vui-input" placeholder="用户名" type="text" data-node-id="username" style="width: 100%;" value=""><input data-v-e85a6f55="" class="vui-input" placeholder="密码" type="password" data-node-id="password" style="width: 100%;" value=""><button data-v-887ba2cc="" class="vui-button" type="button" data-variant="primary" data-node-id="submit" style="width: 100%;">登录</button>
+  </section>
+</div>"
+`;

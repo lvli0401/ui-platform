@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "0.1.0",
+  "id": "doc-absolute",
+  "name": "Absolute Page",
+  "revision": 0,
+  "pages": [
+    {
+      "id": "page-absolute",
+      "name": "Absolute",
+      "root": {
+        "id": "absolute-root",
+        "type": "element",
+        "tag": "div",
+        "style": {
+          "position": "relative",
+          "width": 640,
+          "height": 480,
+          "backgroundColor": "#f8fafc"
+        },
+        "children": [
+          {
+            "id": "absolute-card",
+            "type": "component",
+            "component": "Card",
+            "style": {
+              "position": "absolute",
+              "left": 80,
+              "top": 60,
+              "width": 200,
+              "padding": 16,
+              "backgroundColor": "#ffffff"
+            },
+            "children": [
+              {
+                "id": "absolute-label",
+                "type": "component",
+                "component": "Text",
+                "props": {
+                  "text": "Absolute",
+                  "as": "span"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
