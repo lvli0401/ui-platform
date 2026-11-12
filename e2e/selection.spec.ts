@@ -25,7 +25,7 @@ test('canvas click selects a node and syncs the Layers panel', async ({
     'submit',
   )
   await expect(page.getByTestId('selection-box')).toBeVisible()
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
 
   expect(consoleErrors).toEqual([])
 })
@@ -54,7 +54,7 @@ test('Layers click selects the node and draws the canvas selection box', async (
   expect(Math.abs(selectionBox!.height - nodeBox!.height)).toBeLessThanOrEqual(
     1,
   )
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
 })
 
 test('Layers order mirrors the document tree and hover stays editor-only', async ({
@@ -81,6 +81,6 @@ test('Layers order mirrors the document tree and hover stays editor-only', async
     'data-hovered-node',
     'password',
   )
-  await expect(page.getByTestId('selection-label')).toHaveText('No selection')
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('selection-label')).toHaveText('未选择')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
 })

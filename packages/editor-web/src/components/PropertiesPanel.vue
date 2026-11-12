@@ -11,6 +11,8 @@ import {
   updateNodeStyle,
 } from '../editor/editor-instance'
 import PropertyControl from './PropertyControl.vue'
+import PropertySection from './PropertySection.vue'
+import ZoomControl from './ZoomControl.vue'
 
 interface StyleField {
   key: keyof UIStyle
@@ -18,12 +20,19 @@ interface StyleField {
   type: 'string' | 'number' | 'enum'
   options?: Array<{ value: string; label: string }>
   step?: number
+  color?: boolean
 }
 
-const STYLE_FIELDS: StyleField[] = [
+interface StyleGroup {
+  id: string
+  title: string
+  fields: StyleField[]
+}
+
+const positionFields: StyleField[] = [
   {
     key: 'position',
-    label: 'Position',
+    label: '定位',
     type: 'enum',
     options: [
       { value: 'static', label: 'static' },
@@ -31,11 +40,16 @@ const STYLE_FIELDS: StyleField[] = [
       { value: 'absolute', label: 'absolute' },
     ],
   },
-  { key: 'left', label: 'Left', type: 'number' },
-  { key: 'top', label: 'Top', type: 'number' },
+  { key: 'left', label: '左', type: 'number' },
+  { key: 'top', label: '上', type: 'number' },
+  { key: 'width', label: '宽度', type: 'string' },
+  { key: 'height', label: '高度', type: 'string' },
+]
+
+const layoutFields: StyleField[] = [
   {
     key: 'display',
-    label: 'Display',
+    label: '显示',
     type: 'enum',
     options: [
       { value: 'block', label: 'block' },
@@ -45,7 +59,7 @@ const STYLE_FIELDS: StyleField[] = [
   },
   {
     key: 'flexDirection',
-    label: 'Flex direction',
+    label: '主轴方向',
     type: 'enum',
     options: [
       { value: 'row', label: 'row' },
@@ -54,7 +68,7 @@ const STYLE_FIELDS: StyleField[] = [
   },
   {
     key: 'justifyContent',
-    label: 'Justify',
+    label: '主轴对齐',
     type: 'enum',
     options: [
       { value: 'flex-start', label: 'flex-start' },
@@ -66,7 +80,7 @@ const STYLE_FIELDS: StyleField[] = [
   },
   {
     key: 'alignItems',
-    label: 'Align items',
+    label: '交叉轴对齐',
     type: 'enum',
     options: [
       { value: 'stretch', label: 'stretch' },
@@ -75,18 +89,29 @@ const STYLE_FIELDS: StyleField[] = [
       { value: 'flex-end', label: 'flex-end' },
     ],
   },
-  { key: 'gap', label: 'Gap', type: 'number' },
-  { key: 'padding', label: 'Padding', type: 'number' },
-  { key: 'width', label: 'Width', type: 'string' },
-  { key: 'height', label: 'Height', type: 'string' },
-  { key: 'fontSize', label: 'Font size', type: 'number' },
-  { key: 'fontWeight', label: 'Font weight', type: 'string' },
-  { key: 'color', label: 'Text color', type: 'string' },
-  { key: 'backgroundColor', label: 'Background', type: 'string' },
-  { key: 'borderColor', label: 'Border color', type: 'string' },
-  { key: 'borderWidth', label: 'Border width', type: 'number' },
-  { key: 'borderRadius', label: 'Radius', type: 'number' },
-  { key: 'opacity', label: 'Opacity', type: 'number', step: 0.1 },
+  { key: 'gap', label: '间距', type: 'number' },
+  { key: 'padding', label: '内边距', type: 'number' },
+]
+
+const appearanceFields: StyleField[] = [
+  { key: 'backgroundColor', label: '背景色', type: 'string', color: true },
+  { key: 'borderColor', label: '边框颜色', type: 'string', color: true },
+  { key: 'borderWidth', label: '边框宽度', type: 'number' },
+  { key: 'borderRadius', label: '圆角', type: 'number' },
+  { key: 'opacity', label: '不透明度', type: 'number', step: 0.1 },
+]
+
+const typographyFields: StyleField[] = [
+  { key: 'fontSize', label: '字号', type: 'number' },
+  { key: 'fontWeight', label: '字重', type: 'string' },
+  { key: 'color', label: '文字颜色', type: 'string', color: true },
+]
+
+const STYLE_GROUPS: StyleGroup[] = [
+  { id: 'position', title: '位置与尺寸', fields: positionFields },
+  { id: 'layout', title: '布局', fields: layoutFields },
+  { id: 'appearance', title: '外观', fields: appearanceFields },
+  { id: 'typography', title: '文字', fields: typographyFields },
 ]
 
 interface PropField {
@@ -172,21 +197,20 @@ function handleStyleChange(key: keyof UIStyle, value: JsonValue): void {
 
 <template>
   <aside class="properties-panel">
-    <header class="properties-header">Properties</header>
+    <header class="panel-header">
+      <span class="panel-title">属性</span>
+      <ZoomControl />
+    </header>
 
     <p
       v-if="!selectedNode"
       class="properties-empty"
       data-testid="properties-empty"
     >
-      Select a node to edit its properties.
+      选择一个节点以编辑属性。
     </p>
 
-    <div
-      v-else
-      class="properties-body"
-      :data-revision="revisionRef"
-    >
+    <div v-else class="properties-body" :data-revision="revisionRef">
       <section class="node-summary">
         <div class="node-summary-row">
           <span class="node-type">{{ selectedNode.type }}</span>
@@ -197,8 +221,7 @@ function handleStyleChange(key: keyof UIStyle, value: JsonValue): void {
         <p class="node-label">{{ nodeLabel }}</p>
       </section>
 
-      <section v-if="propFields.length > 0" class="property-section">
-        <h3 class="property-section-title">Props</h3>
+      <PropertySection v-if="propFields.length > 0" title="组件属性">
         <PropertyControl
           v-for="field in propFields"
           :key="`${selectedNode.id}:${field.key}`"
@@ -209,22 +232,26 @@ function handleStyleChange(key: keyof UIStyle, value: JsonValue): void {
           :test-id="`prop-${field.key}`"
           @change="handlePropChange(field.key, $event)"
         />
-      </section>
+      </PropertySection>
 
-      <section class="property-section">
-        <h3 class="property-section-title">Style</h3>
+      <PropertySection
+        v-for="group in STYLE_GROUPS"
+        :key="group.id"
+        :title="group.title"
+      >
         <PropertyControl
-          v-for="field in STYLE_FIELDS"
+          v-for="field in group.fields"
           :key="`${selectedNode.id}:style:${field.key}`"
           :label="field.label"
           :type="field.type"
           :value="selectedNode.style?.[field.key]"
           :options="field.options"
           :step="field.step"
+          :color="field.color"
           :test-id="`style-${field.key}`"
           @change="handleStyleChange(field.key, $event)"
         />
-      </section>
+      </PropertySection>
     </div>
   </aside>
 </template>
@@ -234,78 +261,71 @@ function handleStyleChange(key: keyof UIStyle, value: JsonValue): void {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-left: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-panel);
 }
 
-.properties-header {
+.panel-header {
   display: flex;
   align-items: center;
-  height: 36px;
-  padding: 0 12px;
-  border-bottom: 1px solid #e2e8f0;
-  color: #334155;
-  font-size: 12px;
+  justify-content: space-between;
+  height: var(--panel-header-height);
+  flex-shrink: 0;
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-panel-secondary);
+}
+
+.panel-title {
+  color: var(--color-surface);
+  font-size: var(--text-2xs);
   font-weight: 600;
 }
 
 .properties-empty {
   margin: 12px;
-  color: #64748b;
-  font-size: 12px;
+  color: var(--color-faint);
+  font-size: var(--text-2xs);
 }
 
 .properties-body {
   flex: 1;
   min-height: 0;
-  padding: 10px 12px 24px;
+  padding: 8px 8px 24px;
   overflow: auto;
 }
 
 .node-summary {
-  padding-bottom: 10px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 2px 2px 8px;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .node-summary-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .node-type {
   padding: 1px 6px;
-  border-radius: 999px;
-  background: #e2e8f0;
-  color: #475569;
-  font-size: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-panel-field);
+  color: var(--color-muted);
+  font-size: var(--text-4xs);
   text-transform: uppercase;
 }
 
 .node-id {
   overflow: hidden;
-  color: #334155;
-  font-family: ui-monospace, monospace;
-  font-size: 11px;
+  color: var(--color-surface);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
   text-overflow: ellipsis;
 }
 
 .node-label {
   margin: 6px 0 0;
-  color: #64748b;
-  font-size: 12px;
-}
-
-.property-section {
-  padding-top: 12px;
-}
-
-.property-section-title {
-  margin: 0 0 6px;
-  color: #334155;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  color: var(--color-faint);
+  font-size: var(--text-2xs);
 }
 </style>

@@ -14,7 +14,7 @@ import type {
   UIStyle,
 } from '@vui/core'
 import type { CanvasTransform, Point } from './geometry'
-import { IDENTITY_TRANSFORM } from './geometry'
+import { IDENTITY_TRANSFORM, clampScale, zoomAtPoint } from './geometry'
 import type { DragCommit, DragDropTarget, DragState } from './drag'
 import { createDragState } from './drag'
 
@@ -23,12 +23,15 @@ export interface SelectionState {
   hoveredNodeId: string | null
 }
 
+export type EditorTool = 'select' | 'hand' | 'text'
+
 export class EditorStore {
   private readonly store: DocumentStore
   private selectedNodeIds: string[] = []
   private hoveredNodeId: string | null = null
   private dragState: DragState | null = null
-  private readonly viewport: CanvasTransform = { ...IDENTITY_TRANSFORM }
+  private viewport: CanvasTransform = { ...IDENTITY_TRANSFORM }
+  private tool: EditorTool = 'select'
   private readonly listeners = new Set<() => void>()
   private readonly unsubscribeFromDocument: () => void
 
@@ -60,7 +63,11 @@ export class EditorStore {
   }
 
   get canvasTransform(): Readonly<CanvasTransform> {
-    return this.viewport
+    return { ...this.viewport }
+  }
+
+  get activeTool(): EditorTool {
+    return this.tool
   }
 
   get drag(): Readonly<DragState> | null {
@@ -102,6 +109,45 @@ export class EditorStore {
     if (next === this.hoveredNodeId) return
     this.hoveredNodeId = next
     this.notify()
+  }
+
+  setActiveTool(tool: EditorTool): void {
+    if (tool === this.tool) return
+    this.tool = tool
+    this.notify()
+  }
+
+  setViewport(transform: CanvasTransform): void {
+    const next: CanvasTransform = {
+      scale: clampScale(transform.scale),
+      offsetX: Number.isFinite(transform.offsetX) ? transform.offsetX : 0,
+      offsetY: Number.isFinite(transform.offsetY) ? transform.offsetY : 0,
+    }
+    if (
+      next.scale === this.viewport.scale &&
+      next.offsetX === this.viewport.offsetX &&
+      next.offsetY === this.viewport.offsetY
+    ) {
+      return
+    }
+    this.viewport = next
+    this.notify()
+  }
+
+  panBy(deltaX: number, deltaY: number): void {
+    this.setViewport({
+      scale: this.viewport.scale,
+      offsetX: this.viewport.offsetX + deltaX,
+      offsetY: this.viewport.offsetY + deltaY,
+    })
+  }
+
+  zoomAt(anchor: Point, nextScale: number): void {
+    this.setViewport(zoomAtPoint(this.viewport, anchor, nextScale))
+  }
+
+  resetViewport(): void {
+    this.setViewport({ ...IDENTITY_TRANSFORM })
   }
 
   beginDrag(nodeId: string, startPoint: Point): void {
@@ -202,6 +248,7 @@ export class EditorStore {
     this.selectedNodeIds = []
     this.hoveredNodeId = null
     this.dragState = null
+    this.tool = 'select'
     this.store.replaceDocument(document)
   }
 

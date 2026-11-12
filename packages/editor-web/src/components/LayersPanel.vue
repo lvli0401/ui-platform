@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { UINode } from '@vui/core'
 import {
-  canNodeAcceptChildren,
   componentRegistry,
   deleteNode,
   documentRef,
@@ -13,6 +11,8 @@ import {
   selectNode,
   selectionRef,
 } from '../editor/editor-instance'
+import { findInsertionTargetId } from '../editor/insertion-target'
+import IconButton from './ui/IconButton.vue'
 import LayerTree from './LayerTree.vue'
 
 const page = computed(() => documentRef.value.pages[0])
@@ -26,13 +26,6 @@ const palette = componentRegistry.list()
 const selectedId = computed(() => {
   void revisionRef.value
   return selectionRef.value.selectedNodeIds[0] ?? null
-})
-
-const selectedNode = computed<UINode | null>(() => {
-  void revisionRef.value
-  const id = selectedId.value
-  if (!id) return null
-  return getDocumentIndex().nodeMap.get(id) ?? null
 })
 
 const parentId = computed(() => {
@@ -77,26 +70,8 @@ const canMoveOut = computed(
     grandParentId.value !== null,
 )
 
-function findInsertionTarget(): string | null {
-  const index = getDocumentIndex()
-  const selected = selectedNode.value
-
-  if (selected && canNodeAcceptChildren(selected)) return selected.id
-
-  let ancestorId = selectedId.value
-    ? (index.parentMap.get(selectedId.value) ?? null)
-    : null
-  while (ancestorId) {
-    const ancestor = index.nodeMap.get(ancestorId)
-    if (ancestor && canNodeAcceptChildren(ancestor)) return ancestor.id
-    ancestorId = index.parentMap.get(ancestorId) ?? null
-  }
-
-  return page.value?.root.id ?? null
-}
-
 function insertPaletteNode(componentName: string): void {
-  const targetId = findInsertionTarget()
+  const targetId = findInsertionTargetId()
   if (!targetId) return
 
   const node = componentRegistry.createNode(componentName)
@@ -138,66 +113,50 @@ function handleMoveOut(): void {
 
 <template>
   <aside class="layers-panel">
-    <header class="layers-header">
-      <span class="layers-title">Layers</span>
-      <span class="layers-page">{{ page?.name ?? 'No page' }}</span>
+    <header class="panel-header">
+      <span class="panel-title">图层</span>
+      <span class="panel-meta">{{ page?.name ?? '无页面' }}</span>
     </header>
 
     <div class="layers-actions">
-      <button
-        type="button"
-        class="layer-action"
-        title="Move selected node up"
+      <IconButton
+        icon="arrow-up"
+        label="上移一层"
         data-testid="move-up-button"
         :disabled="!canMoveUp"
         @click="handleMoveUp"
-      >
-        ↑
-      </button>
-      <button
-        type="button"
-        class="layer-action"
-        title="Move selected node down"
+      />
+      <IconButton
+        icon="arrow-down"
+        label="下移一层"
         data-testid="move-down-button"
         :disabled="!canMoveDown"
         @click="handleMoveDown"
-      >
-        ↓
-      </button>
-      <button
-        type="button"
-        class="layer-action layer-action-wide"
-        title="Move selected node one level out"
+      />
+      <IconButton
+        icon="arrow-out"
+        label="移出当前容器"
         data-testid="move-out-button"
         :disabled="!canMoveOut"
         @click="handleMoveOut"
-      >
-        Out
-      </button>
-      <button
-        type="button"
-        class="layer-action layer-action-wide"
-        title="Delete selected node"
+      />
+      <span class="layers-actions-spacer"></span>
+      <IconButton
+        icon="trash"
+        label="删除节点"
         data-testid="delete-button"
         :disabled="!canDelete"
         @click="handleDelete"
-      >
-        Delete
-      </button>
+      />
     </div>
 
     <div class="layers-body">
-      <LayerTree
-        v-if="rootNodes.length > 0"
-        :key="revisionRef"
-        :nodes="rootNodes"
-        :depth="0"
-      />
-      <p v-else class="layers-empty">Document has no pages.</p>
+      <LayerTree v-if="rootNodes.length > 0" :nodes="rootNodes" :depth="0" />
+      <p v-else class="layers-empty">文档中没有页面。</p>
     </div>
 
     <footer class="palette">
-      <p class="palette-title">Insert into selection</p>
+      <p class="palette-title">插入到选中容器</p>
       <div class="palette-grid">
         <button
           v-for="definition in palette"
@@ -219,83 +178,69 @@ function handleMoveOut(): void {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-right: 1px solid #1e293b;
-  background: #0f172a;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-panel);
 }
 
-.layers-header {
+.panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 36px;
-  padding: 0 12px;
-  border-bottom: 1px solid #1e293b;
-  color: #e2e8f0;
-  font-size: 12px;
+  height: var(--panel-header-height);
+  flex-shrink: 0;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-panel-secondary);
 }
 
-.layers-title {
+.panel-title {
+  color: var(--color-surface);
+  font-size: var(--text-2xs);
   font-weight: 600;
 }
 
-.layers-page {
-  color: #64748b;
+.panel-meta {
+  overflow: hidden;
+  color: var(--color-faint);
+  font-size: var(--text-3xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .layers-actions {
   display: flex;
-  gap: 4px;
-  padding: 6px 8px;
-  border-bottom: 1px solid #1e293b;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.layer-action {
-  min-width: 26px;
-  padding: 3px 5px;
-  border: 1px solid #334155;
-  border-radius: 4px;
-  background: #1e293b;
-  color: #cbd5e1;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.layer-action-wide {
+.layers-actions-spacer {
   flex: 1;
-}
-
-.layer-action:hover:not(:disabled) {
-  border-color: #475569;
-  background: #334155;
-}
-
-.layer-action:disabled {
-  color: #475569;
-  cursor: not-allowed;
 }
 
 .layers-body {
   flex: 1;
   min-height: 0;
-  padding: 8px 6px;
+  padding: 4px;
   overflow: auto;
 }
 
 .layers-empty {
   margin: 8px 10px;
-  color: #64748b;
-  font-size: 12px;
+  color: var(--color-faint);
+  font-size: var(--text-2xs);
 }
 
 .palette {
   padding: 8px;
-  border-top: 1px solid #1e293b;
+  border-top: 1px solid var(--color-border);
 }
 
 .palette-title {
   margin: 0 0 6px;
-  color: #64748b;
-  font-size: 10px;
+  color: var(--color-faint);
+  font-size: var(--text-4xs);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -308,16 +253,18 @@ function handleMoveOut(): void {
 
 .palette-button {
   padding: 5px 6px;
-  border: 1px solid #334155;
-  border-radius: 5px;
-  background: #1e293b;
-  color: #cbd5e1;
-  font-size: 11px;
-  cursor: pointer;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-field);
+  color: var(--color-muted);
+  font-size: var(--text-2xs);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .palette-button:hover {
-  border-color: #475569;
-  background: #334155;
+  background: var(--color-panel-field-hover);
+  color: var(--color-surface);
 }
 </style>

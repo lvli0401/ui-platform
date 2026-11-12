@@ -7,8 +7,10 @@ import type {
   UIStyle,
 } from '@vui/core'
 import type {
+  CanvasTransform,
   DragCommit,
   DragDropTarget,
+  EditorTool,
   Point,
   SelectionState,
 } from '@vui/editor-core'
@@ -28,6 +30,8 @@ export const selectionRef = shallowRef<SelectionState>(store.selection)
 export const canUndoRef = ref(store.canUndo)
 export const canRedoRef = ref(store.canRedo)
 export const dragRef = shallowRef(store.drag)
+export const viewportRef = shallowRef<CanvasTransform>(store.canvasTransform)
+export const activeToolRef = shallowRef<EditorTool>(store.activeTool)
 
 store.subscribe(() => {
   documentRef.value = store.document
@@ -36,6 +40,8 @@ store.subscribe(() => {
   canUndoRef.value = store.canUndo
   canRedoRef.value = store.canRedo
   dragRef.value = store.drag
+  viewportRef.value = store.canvasTransform
+  activeToolRef.value = store.activeTool
 })
 
 export function selectNode(nodeId: string | null): void {
@@ -121,4 +127,20 @@ export function undo(): void {
 
 export function redo(): void {
   store.redo()
+}
+
+export function setActiveTool(tool: EditorTool): void {
+  store.setActiveTool(tool)
+}
+
+export function setViewport(transform: CanvasTransform): void {
+  store.setViewport(transform)
+}
+
+export function panBy(deltaX: number, deltaY: number): void {
+  store.panBy(deltaX, deltaY)
+}
+
+export function zoomAt(anchor: Point, nextScale: number): void {
+  store.zoomAt(anchor, nextScale)
 }

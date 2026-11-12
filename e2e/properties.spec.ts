@@ -13,18 +13,18 @@ test('edits props and styles through commands with undo and redo', async ({
   await expect(page.getByTestId('prop-label')).toHaveValue('登录')
 
   await page.getByTestId('prop-label').fill('进入')
-  await expect(page.getByTestId('revision')).toHaveText('revision 1')
+  await expect(page.getByTestId('revision')).toHaveText('修订 1')
   await expect(page.locator('[data-node-id="submit"]')).toHaveText('进入')
 
   await page.getByTestId('style-backgroundColor').fill('#ef4444')
-  await expect(page.getByTestId('revision')).toHaveText('revision 2')
+  await expect(page.getByTestId('revision')).toHaveText('修订 2')
   await expect(page.locator('[data-node-id="submit"]')).toHaveCSS(
     'background-color',
     'rgb(239, 68, 68)',
   )
 
   await page.getByTestId('undo-button').click()
-  await expect(page.getByTestId('revision')).toHaveText('revision 1')
+  await expect(page.getByTestId('revision')).toHaveText('修订 1')
   await expect(page.locator('[data-node-id="submit"]')).toHaveText('进入')
   await expect(page.locator('[data-node-id="submit"]')).toHaveCSS(
     'background-color',
@@ -32,11 +32,11 @@ test('edits props and styles through commands with undo and redo', async ({
   )
 
   await page.getByTestId('undo-button').click()
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
   await expect(page.locator('[data-node-id="submit"]')).toHaveText('登录')
 
   await page.getByTestId('redo-button').click()
-  await expect(page.getByTestId('revision')).toHaveText('revision 1')
+  await expect(page.getByTestId('revision')).toHaveText('修订 1')
   await expect(page.locator('[data-node-id="submit"]')).toHaveText('进入')
 })
 
@@ -53,15 +53,15 @@ test('edits enum and boolean props from the schema-driven panel', async ({
     'type',
     'text',
   )
-  await expect(page.getByTestId('revision')).toHaveText('revision 1')
+  await expect(page.getByTestId('revision')).toHaveText('修订 1')
 
   await page.locator('[data-node-id="submit"]').click()
   await page.getByTestId('prop-disabled').check()
 
   await expect(page.locator('[data-node-id="submit"]')).toBeDisabled()
-  await expect(page.getByTestId('revision')).toHaveText('revision 2')
+  await expect(page.getByTestId('revision')).toHaveText('修订 2')
 
   await page.getByTestId('undo-button').click()
   await expect(page.locator('[data-node-id="submit"]')).toBeEnabled()
-  await expect(page.getByTestId('revision')).toHaveText('revision 1')
+  await expect(page.getByTestId('revision')).toHaveText('修订 1')
 })

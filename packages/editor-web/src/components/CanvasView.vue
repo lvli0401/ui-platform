@@ -1,11 +1,24 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from 'vue'
 import type { CSSProperties } from 'vue'
 import type { PageDefinition } from '@vui/core'
-import type { DragCommit, DragDropTarget, Point } from '@vui/editor-core'
+import type {
+  CanvasTransform,
+  DragCommit,
+  DragDropTarget,
+  Point,
+} from '@vui/editor-core'
 import { resolveNodeIdFromTarget } from '@vui/editor-core'
 import { VirtualUIRuntime } from '@vui/runtime-vue'
 import {
+  activeToolRef,
   beginDrag,
   canNodeAcceptChildren,
   cancelDrag,
@@ -15,11 +28,22 @@ import {
   dragRef,
   getDocumentIndex,
   hoverNode,
+  insertNode,
+  panBy,
   revisionRef,
   selectNode,
   selectionRef,
+  setActiveTool,
+  setViewport,
   updateDrag,
+  viewportRef,
+  zoomAt,
 } from '../editor/editor-instance'
+import { isEditableTarget } from '../editor/commands'
+import { findInsertionTargetId } from '../editor/insertion-target'
+import { clientToArtboardPoint, createTextNode } from '../editor/tool-insert'
+import { registerViewportElements } from '../editor/viewport-controls'
+import CanvasToolbar from './CanvasToolbar.vue'
 
 interface OverlayBox {
   left: number
@@ -37,33 +61,51 @@ interface DragStart {
   absoluteTop: number
 }
 
+interface PanSession {
+  pointerId: number
+  startPoint: Point
+  startViewport: CanvasTransform
+}
+
 interface ResolvedDrop {
   target: DragDropTarget
   marker: OverlayBox
 }
 
 const DRAG_THRESHOLD = 4
+const WHEEL_LINE_HEIGHT = 16
 
 const registry = componentRegistry
+const viewportEl = ref<HTMLElement | null>(null)
+const surfaceEl = ref<HTMLElement | null>(null)
 const stageEl = ref<HTMLElement | null>(null)
 const selectionBox = ref<OverlayBox | null>(null)
 const hoverBox = ref<OverlayBox | null>(null)
 const dragBox = ref<OverlayBox | null>(null)
 const dropMarker = ref<OverlayBox | null>(null)
 const dragStart = ref<DragStart | null>(null)
+const panSession = ref<PanSession | null>(null)
+const spaceHeld = ref(false)
 
 const nodeElements = new Map<string, HTMLElement>()
 let dragPointer: Point | null = null
 let frameRequest: number | null = null
 let suppressClick = false
+let unregisterViewport: (() => void) | null = null
 
 const page = computed<PageDefinition>(() => documentRef.value.pages[0]!)
 const selectedNodeId = computed(
   () => selectionRef.value.selectedNodeIds[0] ?? null,
 )
+const activeTool = computed(() => activeToolRef.value)
 const dragMode = computed(() => dragRef.value?.mode ?? null)
 const dropTarget = computed(() => dragRef.value?.dropTarget ?? null)
 const isDragging = computed(() => dragBox.value !== null)
+const isPanning = computed(() => panSession.value !== null)
+
+const zoomStyle = computed<CSSProperties>(() => ({
+  transform: `translate(${viewportRef.value.offsetX}px, ${viewportRef.value.offsetY}px) scale(${viewportRef.value.scale})`,
+}))
 
 function rebuildNodeElements(): void {
   nodeElements.clear()
@@ -83,14 +125,14 @@ function findNodeElement(id: string): HTMLElement | null {
 }
 
 function overlayBoxFor(element: HTMLElement): OverlayBox | null {
-  const stage = stageEl.value
-  if (!stage) return null
+  const surface = surfaceEl.value
+  if (!surface) return null
 
-  const stageRect = stage.getBoundingClientRect()
+  const surfaceRect = surface.getBoundingClientRect()
   const rect = element.getBoundingClientRect()
   return {
-    left: rect.left - stageRect.left,
-    top: rect.top - stageRect.top,
+    left: rect.left - surfaceRect.left,
+    top: rect.top - surfaceRect.top,
     width: rect.width,
     height: rect.height,
   }
@@ -125,8 +167,7 @@ function measure(): void {
   selectionBox.value = boxFor(selected)
 
   const hovered = selectionRef.value.hoveredNodeId
-  hoverBox.value =
-    hovered && hovered !== selected ? boxFor(hovered) : null
+  hoverBox.value = hovered && hovered !== selected ? boxFor(hovered) : null
 }
 
 function boxStyle(box: OverlayBox): CSSProperties {
@@ -150,19 +191,113 @@ function handleClick(event: MouseEvent): void {
 }
 
 function handlePointerOver(event: PointerEvent): void {
-  if (dragStart.value) return
+  if (dragStart.value || panSession.value) return
+  if (activeTool.value !== 'select') return
   const stage = stageEl.value
   if (!stage) return
   hoverNode(resolveNodeIdFromTarget(event.target, stage))
 }
 
 function handlePointerLeave(): void {
-  if (dragStart.value) return
+  if (dragStart.value || panSession.value) return
   hoverNode(null)
 }
 
+function handleMouseDown(event: MouseEvent): void {
+  if (event.button === 1) {
+    event.preventDefault()
+  }
+}
+
+function startPan(event: PointerEvent): void {
+  const viewport = viewportEl.value
+  if (!viewport) return
+
+  panSession.value = {
+    pointerId: event.pointerId,
+    startPoint: { x: event.clientX, y: event.clientY },
+    startViewport: { ...viewportRef.value },
+  }
+  viewport.setPointerCapture?.(event.pointerId)
+  event.preventDefault()
+}
+
+function insertTextAt(event: PointerEvent): void {
+  const stage = stageEl.value
+  const targetId = findInsertionTargetId()
+  if (!stage || !targetId) return
+
+  const scale = viewportRef.value.scale
+  const world = clientToArtboardPoint(
+    event.clientX,
+    event.clientY,
+    stage.getBoundingClientRect(),
+    scale,
+  )
+  const origin = containingOrigin(targetId)
+  const node = createTextNode(world.x - origin.x, world.y - origin.y)
+
+  insertNode(targetId, node)
+  selectNode(node.id)
+  setActiveTool('select')
+  suppressClick = true
+  event.preventDefault()
+}
+
+/**
+ * Absolute descendants are positioned against their nearest positioned
+ * ancestor. Returns that ancestor's artboard-space origin, or (0, 0) when the
+ * artboard itself is the containing block.
+ */
+function containingOrigin(targetId: string): Point {
+  const stage = stageEl.value
+  if (!stage) return { x: 0, y: 0 }
+
+  const index = getDocumentIndex()
+  const stageRect = stage.getBoundingClientRect()
+  const scale = viewportRef.value.scale
+  let cursor: string | null | undefined = targetId
+
+  while (cursor) {
+    const node = index.nodeMap.get(cursor)
+    if (
+      node &&
+      (node.style?.position === 'relative' ||
+        node.style?.position === 'absolute')
+    ) {
+      const element = findNodeElement(cursor)
+      if (element) {
+        const rect = element.getBoundingClientRect()
+        return {
+          x: (rect.left - stageRect.left) / scale,
+          y: (rect.top - stageRect.top) / scale,
+        }
+      }
+      break
+    }
+    cursor = index.parentMap.get(cursor) ?? null
+  }
+
+  return { x: 0, y: 0 }
+}
+
 function handlePointerDown(event: PointerEvent): void {
+  suppressClick = false
+
+  if (
+    event.button === 1 ||
+    spaceHeld.value ||
+    activeTool.value === 'hand'
+  ) {
+    startPan(event)
+    return
+  }
   if (event.button !== 0) return
+  if (activeTool.value === 'text') {
+    insertTextAt(event)
+    return
+  }
+
   const stage = stageEl.value
   if (!stage) return
 
@@ -192,9 +327,7 @@ function handlePointerDown(event: PointerEvent): void {
   dropMarker.value = null
   suppressClick = false
 
-  if (stage.setPointerCapture) {
-    stage.setPointerCapture(event.pointerId)
-  }
+  viewportEl.value?.setPointerCapture?.(event.pointerId)
   event.preventDefault()
 }
 
@@ -208,16 +341,14 @@ function buildDrop(
   const style = getComputedStyle(containerElement)
   if (style.display !== 'flex' && style.display !== 'inline-flex') return null
 
-  const stage = stageEl.value
-  if (!stage) return null
-  const stageRect = stage.getBoundingClientRect()
-  const stagePoint: Point = {
-    x: point.x - stageRect.left,
-    y: point.y - stageRect.top,
-  }
+  const surface = surfaceEl.value
+  if (!surface) return null
+  const surfaceRect = surface.getBoundingClientRect()
 
   const isRow = style.flexDirection.startsWith('row')
-  const pointerMain = isRow ? stagePoint.x : stagePoint.y
+  const pointerMain = isRow
+    ? point.x - surfaceRect.left
+    : point.y - surfaceRect.top
   const childIds = index.childrenMap.get(containerId) ?? []
 
   const visible: OverlayBox[] = []
@@ -328,6 +459,19 @@ function processDragMove(): void {
 }
 
 function handlePointerMove(event: PointerEvent): void {
+  const pan = panSession.value
+  if (pan) {
+    setViewport({
+      scale: pan.startViewport.scale,
+      offsetX:
+        pan.startViewport.offsetX + (event.clientX - pan.startPoint.x),
+      offsetY:
+        pan.startViewport.offsetY + (event.clientY - pan.startPoint.y),
+    })
+    event.preventDefault()
+    return
+  }
+
   if (!dragStart.value) return
   dragPointer = { x: event.clientX, y: event.clientY }
   if (frameRequest !== null) return
@@ -339,9 +483,9 @@ function handlePointerMove(event: PointerEvent): void {
 }
 
 function releasePointer(pointerId: number): void {
-  const stage = stageEl.value
-  if (stage?.hasPointerCapture(pointerId)) {
-    stage.releasePointerCapture(pointerId)
+  const viewport = viewportEl.value
+  if (viewport?.hasPointerCapture(pointerId)) {
+    viewport.releasePointerCapture(pointerId)
   }
 }
 
@@ -357,6 +501,14 @@ function resetDrag(): void {
 }
 
 function handlePointerUp(event: PointerEvent): void {
+  const pan = panSession.value
+  if (pan) {
+    releasePointer(pan.pointerId)
+    panSession.value = null
+    suppressClick = true
+    return
+  }
+
   const start = dragStart.value
   if (!start) return
 
@@ -374,10 +526,11 @@ function handlePointerUp(event: PointerEvent): void {
   let commit: DragCommit | null = null
   if (moved && drag) {
     if (drag.mode === 'absolute') {
+      const scale = viewportRef.value.scale
       commit = {
         mode: 'absolute',
-        left: Math.round(start.absoluteLeft + delta.x),
-        top: Math.round(start.absoluteTop + delta.y),
+        left: Math.round(start.absoluteLeft + delta.x / scale),
+        top: Math.round(start.absoluteTop + delta.y / scale),
       }
     } else if (drag.dropTarget) {
       const index = getDocumentIndex()
@@ -415,11 +568,84 @@ function handlePointerUp(event: PointerEvent): void {
 }
 
 function handlePointerCancel(): void {
+  const pan = panSession.value
+  if (pan) {
+    releasePointer(pan.pointerId)
+    panSession.value = null
+    return
+  }
+
   const start = dragStart.value
   if (!start) return
   releasePointer(start.pointerId)
   cancelDrag()
   resetDrag()
+}
+
+function handleWheel(event: WheelEvent): void {
+  const viewport = viewportEl.value
+  if (!viewport) return
+
+  event.preventDefault()
+  const factor = event.deltaMode === 1 ? WHEEL_LINE_HEIGHT : 1
+  const deltaX = event.deltaX * factor
+  const deltaY = event.deltaY * factor
+
+  if (event.ctrlKey || event.metaKey) {
+    const rect = viewport.getBoundingClientRect()
+    const anchor = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    }
+    zoomAt(anchor, viewportRef.value.scale * Math.exp(-deltaY * 0.002))
+    return
+  }
+
+  if (event.shiftKey && deltaX === 0) {
+    panBy(-deltaY, 0)
+    return
+  }
+  panBy(-deltaX, -deltaY)
+}
+
+function resetTransient(): void {
+  spaceHeld.value = false
+  panSession.value = null
+}
+
+function handleWindowKeydown(event: KeyboardEvent): void {
+  if (event.code === 'Space' || event.key === ' ') {
+    if (isEditableTarget(event.target)) return
+    const element =
+      event.target instanceof HTMLElement ? event.target : null
+    if (element?.closest('button, [role="button"]')) return
+    spaceHeld.value = true
+    event.preventDefault()
+    return
+  }
+
+  if (event.key === 'Escape') {
+    const pan = panSession.value
+    if (pan) {
+      releasePointer(pan.pointerId)
+      panSession.value = null
+    }
+    if (dragStart.value) {
+      releasePointer(dragStart.value.pointerId)
+      cancelDrag()
+      resetDrag()
+    }
+  }
+}
+
+function handleWindowKeyup(event: KeyboardEvent): void {
+  if (event.code === 'Space' || event.key === ' ') {
+    spaceHeld.value = false
+  }
+}
+
+function handleWindowBlur(): void {
+  resetTransient()
 }
 
 watch(
@@ -441,6 +667,15 @@ watch(
   { flush: 'post' },
 )
 
+watch(
+  viewportRef,
+  async () => {
+    await nextTick()
+    measure()
+  },
+  { flush: 'post' },
+)
+
 let resizeObserver: ResizeObserver | undefined
 
 function handleWindowResize(): void {
@@ -449,124 +684,186 @@ function handleWindowResize(): void {
 
 onMounted(() => {
   window.addEventListener('resize', handleWindowResize)
-  if (typeof ResizeObserver !== 'undefined' && stageEl.value) {
-    resizeObserver = new ResizeObserver(() => measure())
-    resizeObserver.observe(stageEl.value)
+  window.addEventListener('keydown', handleWindowKeydown)
+  window.addEventListener('keyup', handleWindowKeyup)
+  window.addEventListener('blur', handleWindowBlur)
+
+  const viewport = viewportEl.value
+  const stage = stageEl.value
+  if (viewport && stage) {
+    unregisterViewport = registerViewportElements(viewport, stage)
+    const current = viewportRef.value
+    if (
+      current.scale === 1 &&
+      current.offsetX === 0 &&
+      current.offsetY === 0
+    ) {
+      setViewport({
+        scale: 1,
+        offsetX: Math.max(24, (viewport.clientWidth - stage.offsetWidth) / 2),
+        offsetY: 24,
+      })
+    }
   }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => measure())
+    if (viewport) resizeObserver.observe(viewport)
+    if (stage) resizeObserver.observe(stage)
+  }
+
   rebuildNodeElements()
   measure()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleWindowResize)
+  window.removeEventListener('keydown', handleWindowKeydown)
+  window.removeEventListener('keyup', handleWindowKeyup)
+  window.removeEventListener('blur', handleWindowBlur)
   resizeObserver?.disconnect()
+  unregisterViewport?.()
   if (frameRequest !== null) cancelAnimationFrame(frameRequest)
 })
 </script>
 
 <template>
-  <section class="canvas-panel">
-    <div class="canvas-toolbar">
-      <span class="canvas-toolbar-title">Canvas</span>
-      <span class="canvas-toolbar-selection" data-testid="selection-label">
-        {{ selectedNodeId ?? 'No selection' }}
+  <section class="canvas-panel" :data-active-tool="activeTool">
+    <div
+      ref="viewportEl"
+      class="canvas-viewport"
+      :class="{
+        'is-hand': activeTool === 'hand',
+        'is-text': activeTool === 'text',
+        'is-panning': isPanning,
+      }"
+      data-testid="canvas-viewport"
+      @wheel="handleWheel"
+      @pointerdown="handlePointerDown"
+      @pointermove="handlePointerMove"
+      @pointerup="handlePointerUp"
+      @pointercancel="handlePointerCancel"
+      @pointerover="handlePointerOver"
+      @pointerleave="handlePointerLeave"
+      @mousedown="handleMouseDown"
+      @click="handleClick"
+    >
+      <div ref="surfaceEl" class="canvas-surface">
+        <div class="canvas-zoom" :style="zoomStyle">
+          <div ref="stageEl" class="canvas-stage" data-testid="canvas-stage">
+            <VirtualUIRuntime
+              :page="page"
+              :registry="registry"
+              :revision="revisionRef"
+            />
+          </div>
+        </div>
+
+        <div class="canvas-overlay-layer">
+          <div
+            v-if="hoverBox && !isDragging"
+            class="hover-box"
+            data-testid="hover-box"
+            :data-hovered-node="selectionRef.hoveredNodeId"
+            :style="boxStyle(hoverBox)"
+          ></div>
+          <div
+            v-if="selectionBox && !isDragging"
+            class="selection-box"
+            data-testid="selection-box"
+            :data-selected-node="selectedNodeId"
+            :style="boxStyle(selectionBox)"
+          ></div>
+          <div
+            v-if="dragBox"
+            class="drag-preview"
+            data-testid="drag-preview"
+            :data-drag-mode="dragMode"
+            :data-drop-parent="dropTarget?.parentId"
+            :data-drop-index="dropTarget?.index"
+            :style="boxStyle(dragBox)"
+          ></div>
+          <div
+            v-if="dropMarker"
+            class="drop-marker"
+            data-testid="drop-marker"
+            :style="boxStyle(dropMarker)"
+          ></div>
+        </div>
+      </div>
+
+      <span class="canvas-status" data-testid="selection-label">
+        {{ selectedNodeId ?? '未选择' }}
       </span>
     </div>
 
-    <div class="canvas-scroll" @pointerleave="handlePointerLeave">
-      <div
-        ref="stageEl"
-        class="canvas-stage"
-        data-testid="canvas-stage"
-        @click="handleClick"
-        @pointerdown="handlePointerDown"
-        @pointermove="handlePointerMove"
-        @pointerup="handlePointerUp"
-        @pointercancel="handlePointerCancel"
-        @pointerover="handlePointerOver"
-      >
-        <VirtualUIRuntime
-          :page="page"
-          :registry="registry"
-          :revision="revisionRef"
-        />
-
-        <div
-          v-if="hoverBox && !isDragging"
-          class="hover-box"
-          data-testid="hover-box"
-          :data-hovered-node="selectionRef.hoveredNodeId"
-          :style="boxStyle(hoverBox)"
-        ></div>
-        <div
-          v-if="selectionBox && !isDragging"
-          class="selection-box"
-          data-testid="selection-box"
-          :data-selected-node="selectedNodeId"
-          :style="boxStyle(selectionBox)"
-        ></div>
-        <div
-          v-if="dragBox"
-          class="drag-preview"
-          data-testid="drag-preview"
-          :data-drag-mode="dragMode"
-          :data-drop-parent="dropTarget?.parentId"
-          :data-drop-index="dropTarget?.index"
-          :style="boxStyle(dragBox)"
-        ></div>
-        <div
-          v-if="dropMarker"
-          class="drop-marker"
-          data-testid="drop-marker"
-          :style="boxStyle(dropMarker)"
-        ></div>
-      </div>
-    </div>
+    <CanvasToolbar
+      :active-tool="activeTool"
+      @update:active-tool="setActiveTool"
+    />
   </section>
 </template>
 
 <style scoped>
 .canvas-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: #e2e8f0;
+  background: var(--color-canvas);
 }
 
-.canvas-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 36px;
-  padding: 0 14px;
-  border-bottom: 1px solid #cbd5e1;
-  background: #f8fafc;
-  color: #334155;
-  font-size: 12px;
-}
-
-.canvas-toolbar-title {
-  font-weight: 600;
-}
-
-.canvas-toolbar-selection {
-  font-family: ui-monospace, monospace;
-  color: #64748b;
-}
-
-.canvas-scroll {
+.canvas-viewport {
+  position: relative;
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+  background: var(--color-canvas);
+  touch-action: none;
+}
+
+.canvas-viewport.is-hand {
+  cursor: grab;
+}
+
+.canvas-viewport.is-panning {
+  cursor: grabbing;
+}
+
+.canvas-viewport.is-text {
+  cursor: crosshair;
+}
+
+.canvas-surface {
+  position: absolute;
+  inset: 0;
+}
+
+.canvas-zoom {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
 }
 
 .canvas-stage {
   position: relative;
-  width: 100%;
-  min-width: 640px;
-  min-height: 100%;
+  width: var(--artboard-width);
+  min-height: var(--artboard-min-height);
   background: #ffffff;
+  box-shadow: var(--artboard-shadow);
+  color: #111827;
+  color-scheme: light;
+  font-size: 16px;
+}
+
+.canvas-overlay-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
 }
 
 .selection-box,
@@ -574,25 +871,24 @@ onBeforeUnmount(() => {
 .drag-preview,
 .drop-marker {
   position: absolute;
-  z-index: 10;
   pointer-events: none;
 }
 
 .selection-box {
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--color-panel-selected);
   outline-offset: 1px;
-  background: rgb(37 99 235 / 6%);
+  background: var(--color-selection-fill);
 }
 
 .hover-box {
-  outline: 1px dashed #94a3b8;
+  outline: 1px dashed rgb(47 111 221 / 80%);
   outline-offset: 1px;
 }
 
 .drag-preview {
-  border: 1px solid #2563eb;
-  background: rgb(37 99 235 / 10%);
-  box-shadow: 0 8px 20px rgb(15 23 42 / 12%);
+  border: 1px solid var(--color-panel-selected);
+  background: var(--color-selection-fill);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 30%);
 }
 
 .drag-preview[data-drag-mode='absolute'] {
@@ -600,7 +896,26 @@ onBeforeUnmount(() => {
 }
 
 .drop-marker {
-  border-radius: 999px;
-  background: #2563eb;
+  border-radius: var(--radius-pill);
+  background: var(--color-panel-selected);
+}
+
+.canvas-status {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 15;
+  max-width: 40%;
+  overflow: hidden;
+  padding: 3px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: rgb(42 42 42 / 85%);
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-3xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
 }
 </style>

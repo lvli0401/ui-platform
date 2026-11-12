@@ -15,12 +15,14 @@ const props = withDefaults(
     testId: string
     step?: number
     allowUnset?: boolean
+    color?: boolean
   }>(),
   {
     value: undefined,
     options: () => [],
     step: 1,
     allowUnset: false,
+    color: false,
   },
 )
 
@@ -34,6 +36,15 @@ function textValue(): string {
 
 function numberValue(): number | string {
   return typeof props.value === 'number' ? props.value : ''
+}
+
+function colorValue(): string {
+  const raw = textValue()
+  return /^#[0-9a-f]{6}$/i.test(raw)
+    ? raw
+    : /^#[0-9a-f]{3}$/i.test(raw)
+      ? `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`
+      : '#ffffff'
 }
 
 function onTextInput(event: Event): void {
@@ -70,7 +81,7 @@ function onSelectChange(event: Event): void {
       :value="textValue()"
       @change="onSelectChange"
     >
-      <option v-if="allowUnset" value="">Unset</option>
+      <option v-if="allowUnset" value="">未设置</option>
       <option
         v-for="option in options"
         :key="option.value"
@@ -101,6 +112,23 @@ function onSelectChange(event: Event): void {
       @input="onNumberInput"
     />
 
+    <span v-else-if="color" class="property-color-row">
+      <input
+        class="property-swatch"
+        type="color"
+        :value="colorValue()"
+        aria-label="选择颜色"
+        @input="emit('change', ($event.target as HTMLInputElement).value)"
+      />
+      <input
+        class="property-input"
+        type="text"
+        :data-testid="testId"
+        :value="textValue()"
+        @input="onTextInput"
+      />
+    </span>
+
     <input
       v-else
       class="property-input"
@@ -115,16 +143,16 @@ function onSelectChange(event: Event): void {
 <style scoped>
 .property-control {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
+  grid-template-columns: 84px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
-  padding: 3px 0;
+  gap: 6px;
+  padding: 2px 0;
 }
 
 .property-label {
   overflow: hidden;
-  color: #475569;
-  font-size: 11px;
+  color: var(--color-muted);
+  font-size: var(--text-2xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -132,17 +160,21 @@ function onSelectChange(event: Event): void {
 .property-input {
   width: 100%;
   min-width: 0;
-  padding: 4px 6px;
-  border: 1px solid #cbd5e1;
-  border-radius: 4px;
-  background: #ffffff;
-  color: #0f172a;
-  font: inherit;
-  font-size: 12px;
+  height: var(--control-height);
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-field);
+  color: var(--color-surface);
+  font-size: var(--text-2xs);
+}
+
+.property-input:hover {
+  background: var(--color-panel-field-hover);
 }
 
 .property-input:focus {
-  border-color: #2563eb;
+  border-color: var(--color-panel-focus);
   outline: none;
 }
 
@@ -156,11 +188,30 @@ function onSelectChange(event: Event): void {
   width: 14px;
   height: 14px;
   margin: 0;
+  accent-color: var(--color-accent);
 }
 
 .property-checkbox-label {
-  color: #64748b;
-  font-family: ui-monospace, monospace;
-  font-size: 11px;
+  color: var(--color-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-3xs);
+}
+
+.property-color-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.property-swatch {
+  width: 22px;
+  height: var(--control-height);
+  flex-shrink: 0;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-field);
+  cursor: pointer;
 }
 </style>

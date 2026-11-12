@@ -1,6 +1,6 @@
 # Virtual UI Platform
 
-Virtual UI 是一个以可序列化节点树为唯一事实来源的 UI 工程平台。P0 已打通 **Virtual UI → Vue Runtime → Editor** 闭环：文档可以渲染、编辑、拖拽、撤销与导入导出，编辑器状态不会写入文档。
+Virtual UI 是一个以可序列化节点树为唯一事实来源的 UI 工程平台。P0 已打通 **Virtual UI → Vue Runtime → Editor** 闭环：文档可以渲染、编辑、拖拽、撤销与导入导出，编辑器状态不会写入文档。迭代 1 在此基础上完成了 OpenPencil 风格的深色外壳与画布交互。
 
 当前仓库不依赖 OpenPencil，也不使用其包、SceneGraph、Renderer 或内部实现。
 
@@ -17,7 +17,7 @@ Virtual UI 是一个以可序列化节点树为唯一事实来源的 UI 工程�
 | `packages/virtual-ui`（`@vui/core`） | 文档类型、校验、索引、序列化、命令引擎 |
 | `packages/runtime-vue`（`@vui/runtime-vue`） | 组件注册表与基于 Vue `h()` 的渲染器 |
 | `packages/editor-core`（`@vui/editor-core`） | 编辑器状态、选择、拖拽、持久化 |
-| `packages/editor-web`（`@vui/editor-web`） | 三栏编辑器应用：Layers、Canvas、Properties |
+| `packages/editor-web`（`@vui/editor-web`） | 深色三栏编辑器应用：Layers、Canvas、Properties，含缩放、平移与工具模式 |
 | `apps/playground`（`@vui/playground`） | 渲染器实验页面，不参与 P0 验收 |
 
 关键约束：
@@ -97,9 +97,12 @@ docs/              # 架构方案与 P0 执行计划
 
 - `docs/poc.md`：现行架构方案
 - `docs/poc-plan-p0.md`：P0 任务拆分、接口契约与验收记录
+- `docs/openpencil-ui-study.md`：OpenPencil 功能与视觉研究，以及迭代 1 的实现范围
 
-## P0 范围
+## P0 范围与迭代 1
 
-已包含：登录页渲染、选择联动、属性编辑、撤销重做、结构增删移、Canvas 拖拽、JSON 导入导出、非法文档提示、事件惰性处理。
+P0 已包含：登录页渲染、选择联动、属性编辑、撤销重做、结构增删移、Canvas 拖拽、JSON 导入导出、非法文档提示、事件惰性处理。
 
-不包含：后端存储、自动保存、协同编辑、代码生成、完整设计系统、多页面编辑、缩放与框选。
+迭代 1 新增：深色编辑器外壳、单文档 Tab、白色画板、底部工具浮条（选择/抓手/文本）、画布缩放与平移、文本工具插入、快捷键命令层、属性面板折叠分区与缩放菜单。
+
+P0 与迭代 1 均不包含：后端存储、自动保存、协同编辑、代码生成、完整设计系统、多页面编辑、框选与多选、缩放手柄、形状工具。

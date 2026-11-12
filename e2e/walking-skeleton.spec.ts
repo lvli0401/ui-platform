@@ -39,7 +39,7 @@ test('walking skeleton: edit, export, reload, import, re-export deterministicall
   await page.locator('[data-node-id="submit"]').click()
   await page.getByTestId('prop-label').fill('进入')
   await page.getByTestId('style-backgroundColor').fill('#ef4444')
-  await expect(page.getByTestId('revision')).toHaveText('revision 2')
+  await expect(page.getByTestId('revision')).toHaveText('修订 2')
 
   const firstDownloadPromise = page.waitForEvent('download')
   await page.getByTestId('export-button').click()
@@ -70,12 +70,12 @@ test('walking skeleton: edit, export, reload, import, re-export deterministicall
   ).toBe('#ef4444')
 
   await page.reload()
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
 
   await page.getByTestId('import-input').setInputFiles(firstPath!)
 
   await expect(page.getByTestId('document-name')).toHaveText('Login Page')
-  await expect(page.getByTestId('revision')).toHaveText('revision 2')
+  await expect(page.getByTestId('revision')).toHaveText('修订 2')
   await expect(page.getByTestId('properties-empty')).toBeVisible()
 
   await page.locator('[data-node-id="submit"]').click()
@@ -113,6 +113,6 @@ test('invalid import shows issue paths and keeps the current document', async ({
   expect(errorCount).toBeGreaterThan(1)
 
   await expect(page.getByTestId('document-name')).toHaveText('Login Page')
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
   await expect(page.locator('[data-node-id="submit"]')).toHaveText('登录')
 })

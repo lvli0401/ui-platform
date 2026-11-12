@@ -19,7 +19,7 @@ test('acceptance: main editing loop completes without console errors', async ({
   await page.goto('/')
 
   await expect(page.getByTestId('document-name')).toHaveText('Login Page')
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
   await expect(page.getByTestId('layer-login-card')).toBeVisible()
 
   await page.locator('[data-node-id="submit"]').click()
@@ -36,7 +36,7 @@ test('acceptance: main editing loop completes without console errors', async ({
   await page.getByTestId('layer-submit').click()
   await page.getByTestId('prop-label').fill('验收')
   await page.getByTestId('style-backgroundColor').fill('#16a34a')
-  await expect(page.getByTestId('revision')).toHaveText('revision 2')
+  await expect(page.getByTestId('revision')).toHaveText('修订 2')
   await expect(page.locator('[data-node-id="submit"]')).toHaveText('验收')
   await expect(page.locator('[data-node-id="submit"]')).toHaveCSS(
     'background-color',
@@ -45,26 +45,26 @@ test('acceptance: main editing loop completes without console errors', async ({
 
   await page.getByTestId('undo-button').click()
   await page.getByTestId('undo-button').click()
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
   await expect(page.locator('[data-node-id="submit"]')).toHaveText('登录')
 
   await page.getByTestId('redo-button').click()
   await page.getByTestId('redo-button').click()
-  await expect(page.getByTestId('revision')).toHaveText('revision 2')
+  await expect(page.getByTestId('revision')).toHaveText('修订 2')
   await expect(page.locator('[data-node-id="submit"]')).toHaveText('验收')
 
   await page.getByTestId('layer-login-card').click()
   await page.getByTestId('palette-Text').click()
-  await expect(page.getByTestId('revision')).toHaveText('revision 3')
+  await expect(page.getByTestId('revision')).toHaveText('修订 3')
   await expect(
     page.locator('[data-testid^="layer-"][data-selected="true"]'),
   ).toContainText('Text')
   await page.getByTestId('delete-button').click()
-  await expect(page.getByTestId('revision')).toHaveText('revision 4')
+  await expect(page.getByTestId('revision')).toHaveText('修订 4')
   await page.getByTestId('undo-button').click()
-  await expect(page.getByTestId('revision')).toHaveText('revision 3')
+  await expect(page.getByTestId('revision')).toHaveText('修订 3')
   await page.getByTestId('undo-button').click()
-  await expect(page.getByTestId('revision')).toHaveText('revision 2')
+  await expect(page.getByTestId('revision')).toHaveText('修订 2')
 
   expect(errors).toEqual([])
 })
@@ -131,7 +131,7 @@ test('acceptance: event definitions render inert and unknown actions do not cras
   await page.getByTestId('import-input').setInputFiles(documentPath)
 
   await expect(page.getByTestId('document-name')).toHaveText('Events Page')
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
   await expect(page.locator('[data-node-id="event-button"]')).toHaveText(
     'Run action',
   )
@@ -145,7 +145,7 @@ test('acceptance: event definitions render inert and unknown actions do not cras
 
   await page.locator('[data-node-id="event-button"]').click()
   await expect(page.getByTestId('selection-label')).toHaveText('event-button')
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
   await expect(page.locator('[data-node-id="event-button"]')).toHaveText(
     'Run action',
   )
@@ -198,10 +198,10 @@ test('acceptance: invalid import is rejected with readable paths', async ({
   )
 
   await expect(page.getByTestId('document-name')).toHaveText('Login Page')
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
   await expect(page.locator('[data-node-id="submit"]')).toHaveText('登录')
 
-  await page.getByLabel('Dismiss errors').click()
+  await page.getByLabel('关闭错误提示').click()
   await expect(page.getByTestId('document-errors')).toHaveCount(0)
 
   expect(errors).toEqual([])

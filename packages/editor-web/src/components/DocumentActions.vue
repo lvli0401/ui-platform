@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type { ValidationIssue } from '@vui/core'
 import { BrowserFilePersistence } from '@vui/editor-core'
 import { documentRef, replaceDocument } from '../editor/editor-instance'
+import IconButton from './ui/IconButton.vue'
 
 const persistence = new BrowserFilePersistence()
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -19,7 +20,7 @@ async function handleExport(): Promise<void> {
   try {
     await persistence.save(documentRef.value)
   } catch (error) {
-    errorTitle.value = 'Export failed'
+    errorTitle.value = '导出失败'
     problems.value = [
       {
         code: 'EXPORT_ERROR',
@@ -45,7 +46,7 @@ async function handleFileChange(event: Event): Promise<void> {
   clearProblems()
   const result = await persistence.load(file)
   if (!result.ok) {
-    errorTitle.value = `Import failed: ${file.name}`
+    errorTitle.value = `导入失败：${file.name}`
     problems.value = result.issues
     return
   }
@@ -56,22 +57,18 @@ async function handleFileChange(event: Event): Promise<void> {
 
 <template>
   <div class="document-actions">
-    <button
-      type="button"
-      class="document-button"
+    <IconButton
+      icon="export"
+      label="导出 JSON"
       data-testid="export-button"
       @click="handleExport"
-    >
-      Export JSON
-    </button>
-    <button
-      type="button"
-      class="document-button"
+    />
+    <IconButton
+      icon="import"
+      label="导入 JSON"
       data-testid="import-button"
       @click="openImport"
-    >
-      Import JSON
-    </button>
+    />
     <input
       ref="fileInput"
       class="document-file-input"
@@ -89,14 +86,11 @@ async function handleFileChange(event: Event): Promise<void> {
     >
       <header class="document-errors-header">
         <span>{{ errorTitle }}</span>
-        <button
-          type="button"
-          class="document-errors-close"
-          aria-label="Dismiss errors"
+        <IconButton
+          icon="close"
+          label="关闭错误提示"
           @click="clearProblems"
-        >
-          ×
-        </button>
+        />
       </header>
       <ul class="document-errors-list">
         <li
@@ -116,23 +110,8 @@ async function handleFileChange(event: Event): Promise<void> {
 <style scoped>
 .document-actions {
   display: flex;
-  gap: 6px;
-  margin-left: 16px;
-}
-
-.document-button {
-  padding: 3px 9px;
-  border: 1px solid #334155;
-  border-radius: 5px;
-  background: #0f172a;
-  color: #cbd5e1;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.document-button:hover {
-  border-color: #475569;
-  background: #1e293b;
+  align-items: center;
+  gap: 2px;
 }
 
 .document-file-input {
@@ -141,36 +120,27 @@ async function handleFileChange(event: Event): Promise<void> {
 
 .document-errors {
   position: fixed;
-  top: 52px;
+  top: calc(var(--header-height) + 8px);
   right: 12px;
   z-index: 50;
   width: 380px;
   max-height: 50vh;
   overflow: auto;
-  border: 1px solid #fecaca;
-  border-radius: 8px;
-  background: #fff1f2;
-  color: #7f1d1d;
-  box-shadow: 0 10px 25px rgb(15 23 42 / 15%);
-  font-size: 12px;
+  border: 1px solid var(--color-error-border);
+  border-radius: var(--radius-md);
+  background: var(--color-panel-secondary);
+  color: var(--color-error);
+  box-shadow: var(--floating-bar-shadow);
+  font-size: var(--text-2xs);
 }
 
 .document-errors-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
-  border-bottom: 1px solid #fecaca;
+  padding: 6px 6px 6px 10px;
+  border-bottom: 1px solid var(--color-error-border);
   font-weight: 600;
-}
-
-.document-errors-close {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
 }
 
 .document-errors-list {
@@ -184,8 +154,9 @@ async function handleFileChange(event: Event): Promise<void> {
 
 .document-error-path {
   margin-right: 6px;
-  color: #b91c1c;
-  font-family: ui-monospace, monospace;
-  font-size: 10px;
+  color: var(--color-error);
+  font-family: var(--font-mono);
+  font-size: var(--text-3xs);
+  opacity: 0.8;
 }
 </style>

@@ -77,6 +77,6 @@ describe('PropertyControl', () => {
       options: [{ value: 'flex', label: 'flex' }],
     })
 
-    expect(wrapper.get('[data-testid="field"]').text()).toContain('Unset')
+    expect(wrapper.get('[data-testid="field"]').text()).toContain('未设置')
   })
 })

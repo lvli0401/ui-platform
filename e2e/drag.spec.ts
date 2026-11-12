@@ -39,12 +39,12 @@ test('flex drag within a container commits one move and undo restores order', as
 
   await expect(page.getByTestId('drag-preview')).toBeVisible()
   await expect(page.getByTestId('drop-marker')).toBeVisible()
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
   expect(await layerIds(page)).toEqual(ORIGINAL_LAYERS)
 
   await page.mouse.up()
 
-  await expect(page.getByTestId('revision')).toHaveText('revision 1')
+  await expect(page.getByTestId('revision')).toHaveText('修订 1')
   expect(await layerIds(page)).toEqual([
     'layer-login-root',
     'layer-login-card',
@@ -56,7 +56,7 @@ test('flex drag within a container commits one move and undo restores order', as
   await expect(page.getByTestId('drag-preview')).toHaveCount(0)
 
   await page.getByTestId('undo-button').click()
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
   expect(await layerIds(page)).toEqual(ORIGINAL_LAYERS)
 })
 
@@ -76,7 +76,7 @@ test('flex drag moves a node into another flex parent', async ({ page }) => {
   await page.mouse.move(stage!.x + 20, stage!.y + 20, { steps: 12 })
   await page.mouse.up()
 
-  await expect(page.getByTestId('revision')).toHaveText('revision 1')
+  await expect(page.getByTestId('revision')).toHaveText('修订 1')
   expect(await layerIds(page)).toEqual([
     'layer-login-root',
     'layer-submit',
@@ -111,11 +111,11 @@ test('absolute drag updates left and top once, and undo restores them', async ({
     'data-drag-mode',
     'absolute',
   )
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
 
   await page.mouse.up()
 
-  await expect(page.getByTestId('revision')).toHaveText('revision 1')
+  await expect(page.getByTestId('revision')).toHaveText('修订 1')
   await expect(page.getByTestId('properties-node-id')).toHaveText(
     'absolute-card',
   )
@@ -123,7 +123,7 @@ test('absolute drag updates left and top once, and undo restores them', async ({
   await expect(page.getByTestId('style-top')).toHaveValue('140')
 
   await page.getByTestId('undo-button').click()
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
   await expect(page.getByTestId('style-left')).toHaveValue('80')
   await expect(page.getByTestId('style-top')).toHaveValue('60')
 })
@@ -203,7 +203,7 @@ test('records a 500-node drag frame baseline', async ({ page }, testInfo) => {
   })
   await page.mouse.up()
 
-  await expect(page.getByTestId('revision')).toHaveText('revision 1')
+  await expect(page.getByTestId('revision')).toHaveText('修订 1')
 
   const stats = await page.evaluate(() => {
     const target = window as unknown as {

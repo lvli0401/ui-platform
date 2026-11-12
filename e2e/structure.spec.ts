@@ -24,7 +24,7 @@ test('inserts a component into the selected container and selects it', async ({
   await page.getByTestId('layer-login-card').click()
   await page.getByTestId('palette-Input').click()
 
-  await expect(page.getByTestId('revision')).toHaveText('revision 1')
+  await expect(page.getByTestId('revision')).toHaveText('修订 1')
   await expect(page.getByTestId('properties-node-id')).toHaveText(/^node-/)
 
   const inserted = page.locator(
@@ -38,7 +38,7 @@ test('inserts a component into the selected container and selects it', async ({
   expect(ids[6]).toMatch(/^layer-node-/)
 
   await page.getByTestId('undo-button').click()
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
   expect(await layerIds(page)).toEqual(ORIGINAL_LAYERS)
 })
 
@@ -48,14 +48,14 @@ test('deletes a subtree and undo restores it in one step', async ({ page }) => {
   await page.getByTestId('layer-login-card').click()
   await page.getByTestId('delete-button').click()
 
-  await expect(page.getByTestId('revision')).toHaveText('revision 1')
+  await expect(page.getByTestId('revision')).toHaveText('修订 1')
   await expect(page.getByTestId('layer-login-card')).toHaveCount(0)
   await expect(page.getByTestId('layer-submit')).toHaveCount(0)
   await expect(page.getByTestId('properties-empty')).toBeVisible()
 
   await page.getByTestId('undo-button').click()
 
-  await expect(page.getByTestId('revision')).toHaveText('revision 0')
+  await expect(page.getByTestId('revision')).toHaveText('修订 0')
   await expect(page.getByTestId('layer-login-card')).toBeVisible()
   await expect(page.getByTestId('layer-submit')).toBeVisible()
   expect(await layerIds(page)).toEqual(ORIGINAL_LAYERS)
@@ -67,7 +67,7 @@ test('moves a node across levels and preserves its props', async ({ page }) => {
   await page.getByTestId('layer-username').click()
   await page.getByTestId('move-out-button').click()
 
-  await expect(page.getByTestId('revision')).toHaveText('revision 1')
+  await expect(page.getByTestId('revision')).toHaveText('修订 1')
   expect(await layerIds(page)).toEqual([
     'layer-login-root',
     'layer-login-card',
@@ -90,7 +90,7 @@ test('reorders siblings with move up and down', async ({ page }) => {
   await page.getByTestId('layer-password').click()
   await page.getByTestId('move-up-button').click()
 
-  await expect(page.getByTestId('revision')).toHaveText('revision 1')
+  await expect(page.getByTestId('revision')).toHaveText('修订 1')
   expect(await layerIds(page)).toEqual([
     'layer-login-root',
     'layer-login-card',
@@ -102,7 +102,7 @@ test('reorders siblings with move up and down', async ({ page }) => {
 
   await page.getByTestId('move-down-button').click()
 
-  await expect(page.getByTestId('revision')).toHaveText('revision 2')
+  await expect(page.getByTestId('revision')).toHaveText('修订 2')
   expect(await layerIds(page)).toEqual(ORIGINAL_LAYERS)
 
   await page.getByTestId('undo-button').click()
